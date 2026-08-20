@@ -1,0 +1,962 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
+<title>สมุดบัญชีหนี้ | Debt Ledger</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Noto+Serif+Thai:wght@400;600;700&family=Sarabun:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --paper:#F2EAD6;
+    --paper-card:#FBF6E9;
+    --paper-line:#D9CBA8;
+    --ink:#2B2118;
+    --ink-soft:#5B5142;
+    --red:#8C2F2F;
+    --red-soft:#C1584F;
+    --green:#3F6B4F;
+    --green-soft:#6E9B7C;
+    --gold:#B8862B;
+    --gold-soft:#E4C77A;
+    --shadow: 0 2px 0 rgba(43,33,24,.08), 0 8px 20px rgba(43,33,24,.08);
+    font-size:16px;
+  }
+  *{box-sizing:border-box;}
+  html,body{overflow-x:hidden;}
+  body{
+    margin:0;
+    background:
+      radial-gradient(circle at 20% 0%, rgba(184,134,43,.08), transparent 40%),
+      var(--paper);
+    color:var(--ink);
+    font-family:'Sarabun',sans-serif;
+    padding-bottom:80px;
+  }
+  .mono{font-family:'IBM Plex Mono',monospace; font-variant-numeric: tabular-nums;}
+  .serif{font-family:'Noto Serif Thai',serif;}
+
+  /* ---------- PIN GATE ---------- */
+  #pinGate{
+    position:fixed; inset:0; z-index:100;
+    background:
+      radial-gradient(circle at 30% 20%, rgba(184,134,43,.12), transparent 45%),
+      var(--paper);
+    display:flex; align-items:center; justify-content:center;
+    padding:24px;
+  }
+  .pin-box{
+    background:var(--paper-card); border:1px solid var(--paper-line);
+    border-radius:14px; box-shadow:var(--shadow);
+    padding:32px 28px; max-width:360px; width:100%; text-align:center;
+  }
+  .pin-box .tag{
+    font-family:'IBM Plex Mono',monospace; font-size:11.5px; letter-spacing:.12em;
+    color:var(--ink-soft); border:1px solid var(--paper-line); padding:3px 10px;
+    border-radius:20px; display:inline-block;
+  }
+  .pin-box h1{font-family:'Noto Serif Thai',serif; font-size:24px; margin:14px 0 6px;}
+  .pin-box p{color:var(--ink-soft); font-size:13.5px; margin:0 0 20px;}
+  #pinInput{
+    width:100%; font-family:'IBM Plex Mono',monospace; font-size:26px;
+    text-align:center; letter-spacing:.4em; padding:12px 10px;
+    border:1.5px solid var(--paper-line); border-radius:10px; background:#fff;
+    color:var(--ink);
+  }
+  #pinInput:focus{outline:none; border-color:var(--gold);}
+  #pinError{color:var(--red); font-size:13px; margin-top:10px; min-height:18px;}
+  #pinSubmit{width:100%; margin-top:16px; padding:12px; font-size:15px;}
+  .pin-setup-note{
+    margin-top:16px; font-size:12px; color:var(--ink-soft);
+    background:rgba(184,134,43,.08); border:1px dashed var(--gold);
+    border-radius:8px; padding:8px 10px; text-align:left;
+  }
+
+  header.ledger-head{
+    padding:28px 20px 20px;
+    max-width:1100px;
+    margin:0 auto;
+    border-bottom:3px double var(--ink);
+    position:relative;
+  }
+  .topbar{
+    display:flex; justify-content:space-between; align-items:center; gap:10px; flex-wrap:wrap;
+  }
+  header.ledger-head .tag{
+    display:inline-block;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:11.5px;
+    letter-spacing:.1em;
+    color:var(--ink-soft);
+    border:1px solid var(--paper-line);
+    padding:3px 10px;
+    border-radius:20px;
+    background:var(--paper-card);
+  }
+  header.ledger-head h1{
+    font-family:'Noto Serif Thai',serif;
+    font-weight:700;
+    font-size:clamp(26px,5vw,42px);
+    margin:10px 0 4px;
+    color:var(--ink);
+  }
+  header.ledger-head p.sub{
+    color:var(--ink-soft);
+    margin:0;
+    font-size:14.5px;
+  }
+  .sync-status{
+    display:flex; align-items:center; gap:6px;
+    font-family:'IBM Plex Mono',monospace; font-size:12px;
+    padding:4px 10px; border-radius:20px; border:1px solid var(--paper-line);
+    background:var(--paper-card); color:var(--ink-soft);
+  }
+  .sync-status .dot{width:7px;height:7px;border-radius:50%;background:var(--ink-soft);}
+  .sync-status.ok .dot{background:var(--green);}
+  .sync-status.saving .dot{background:var(--gold); animation:pulse 1s infinite;}
+  .sync-status.err .dot{background:var(--red);}
+  @keyframes pulse{0%,100%{opacity:1;}50%{opacity:.3;}}
+  .icon-btn{
+    background:none;border:1px solid var(--paper-line);cursor:pointer;
+    color:var(--ink-soft); font-size:12.5px; padding:5px 11px; border-radius:20px;
+    font-family:'Sarabun',sans-serif; font-weight:600;
+  }
+  .icon-btn:hover{border-color:var(--gold); color:var(--ink);}
+
+  main{max-width:1100px;margin:0 auto;padding:0 20px;}
+
+  section{margin-top:30px;}
+  .section-title{
+    display:flex;align-items:baseline;gap:10px;flex-wrap:wrap;
+    margin-bottom:14px;
+  }
+  .section-title .no{
+    font-family:'IBM Plex Mono',monospace;
+    color:var(--gold);
+    font-weight:600;
+    font-size:14px;
+  }
+  .section-title h2{
+    font-family:'Noto Serif Thai',serif;
+    font-size:20px;
+    margin:0;
+    color:var(--ink);
+  }
+  .section-title .hint{
+    color:var(--ink-soft);
+    font-size:12.5px;
+    margin-left:auto;
+  }
+
+  .cards{
+    display:grid;
+    grid-template-columns:repeat(auto-fit,minmax(160px,1fr));
+    gap:12px;
+  }
+  .card{
+    background:var(--paper-card);
+    border:1px solid var(--paper-line);
+    border-radius:10px;
+    padding:14px 16px;
+    box-shadow:var(--shadow);
+  }
+  .card .label{
+    font-size:11.5px;color:var(--ink-soft);
+    text-transform:uppercase;letter-spacing:.05em;
+  }
+  .card .value{
+    font-family:'IBM Plex Mono',monospace;
+    font-size:22px;font-weight:600;
+    margin-top:6px;color:var(--ink);
+    word-break:break-word;
+  }
+  .card .value.red{color:var(--red);}
+  .card .value.green{color:var(--green);}
+  .card .sub{font-size:11.5px;color:var(--ink-soft);margin-top:4px;}
+
+  .tbl-wrap{
+    background:var(--paper-card);
+    border:1px solid var(--paper-line);
+    border-radius:10px;
+    overflow-x:auto;
+    -webkit-overflow-scrolling:touch;
+    box-shadow:var(--shadow);
+  }
+  table{border-collapse:collapse;width:100%;min-width:780px;}
+  thead th{
+    text-align:left;
+    font-size:12px;
+    color:var(--ink-soft);
+    text-transform:uppercase;letter-spacing:.04em;
+    padding:11px 9px;
+    border-bottom:2px solid var(--ink);
+    background:var(--paper-card);
+    white-space:nowrap;
+  }
+  tbody td{
+    padding:7px 9px;
+    border-bottom:1px solid var(--paper-line);
+    font-size:14px;
+    vertical-align:middle;
+  }
+  tbody tr:hover{background:rgba(184,134,43,.06);}
+  input.cell, select.cell{
+    width:100%;
+    border:1px solid transparent;
+    background:transparent;
+    font-family:'IBM Plex Mono',monospace;
+    font-size:13.5px;
+    padding:5px 6px;
+    border-radius:6px;
+    color:var(--ink);
+  }
+  input.cell[data-name]{font-family:'Sarabun',sans-serif;}
+  input.cell:focus, select.cell:focus{
+    outline:none;
+    border-color:var(--gold);
+    background:#fff;
+  }
+  .pill{
+    display:inline-block;padding:2px 9px;border-radius:20px;
+    font-family:'IBM Plex Mono',monospace;font-size:11.5px;font-weight:600;
+  }
+  .pill.high{background:rgba(140,47,47,.12);color:var(--red);}
+  .pill.mid{background:rgba(184,134,43,.14);color:#8a611c;}
+  .pill.low{background:rgba(63,107,79,.12);color:var(--green);}
+  .del-btn{
+    background:none;border:none;cursor:pointer;color:var(--red-soft);
+    font-size:16px;padding:4px 8px;border-radius:6px;
+  }
+  .del-btn:hover{background:rgba(140,47,47,.1);color:var(--red);}
+
+  .btn{
+    font-family:'Sarabun',sans-serif;font-weight:600;font-size:14px;
+    padding:10px 16px;border-radius:8px;border:1px solid var(--ink);
+    background:var(--ink);color:var(--paper-card);cursor:pointer;
+    transition:transform .05s ease, opacity .15s ease;
+  }
+  .btn:hover{opacity:.88;}
+  .btn:active{transform:scale(.98);}
+  .btn.ghost{background:transparent;color:var(--ink);border:1px solid var(--ink-soft);}
+  .btn.gold{background:var(--gold);border-color:var(--gold);color:#2B2118;}
+  .btn.small{padding:7px 12px;font-size:12.5px;}
+  .row-actions{display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;}
+
+  .chips{display:flex;gap:8px;flex-wrap:wrap;margin:6px 0 18px;}
+  .chip{
+    padding:8px 15px;border-radius:20px;border:1.5px solid var(--paper-line);
+    background:var(--paper-card);cursor:pointer;font-size:13px;font-weight:600;
+    color:var(--ink-soft); user-select:none;
+  }
+  .chip.active{border-color:var(--gold);background:var(--gold-soft);color:#4a3410;}
+  .field-row{display:flex;gap:16px;flex-wrap:wrap;align-items:flex-end;margin-bottom:18px;}
+  .field{display:flex;flex-direction:column;gap:6px;}
+  .field label{font-size:12px;color:var(--ink-soft);}
+  .field input, .field select{
+    font-family:'IBM Plex Mono',monospace;
+    padding:9px 10px;border:1px solid var(--paper-line);border-radius:8px;
+    background:#fff; font-size:14px; min-width:130px; width:100%;
+  }
+
+  .strategy-grid{display:grid;grid-template-columns:1fr 1fr;gap:16px;}
+  @media (max-width:760px){.strategy-grid{grid-template-columns:1fr;}}
+  .strategy-card{
+    background:var(--paper-card);border:1px solid var(--paper-line);
+    border-radius:10px;padding:16px 18px;box-shadow:var(--shadow);
+  }
+  .strategy-card h3{font-family:'Noto Serif Thai',serif;margin:0 0 4px;font-size:17px;}
+  .strategy-card .badge{
+    display:inline-block;font-size:10.5px;padding:2px 8px;border-radius:10px;
+    background:var(--gold-soft);color:#4a3410;font-weight:700;margin-bottom:10px;
+  }
+  .strategy-stats{display:flex;flex-wrap:wrap;gap:16px;margin:12px 0;}
+  .strategy-stats div .num{font-family:'IBM Plex Mono',monospace;font-size:20px;font-weight:600;}
+  .strategy-stats div .cap{font-size:11px;color:var(--ink-soft);}
+  .order-list{list-style:none;margin:10px 0 0;padding:0;font-size:13px;}
+  .order-list li{
+    display:flex;justify-content:space-between;padding:5px 0;
+    border-bottom:1px dashed var(--paper-line);
+    font-family:'IBM Plex Mono',monospace;
+  }
+  .order-list li span.n{font-family:'Sarabun',sans-serif;color:var(--ink-soft);}
+
+  svg.chart{width:100%;height:200px;overflow:visible;}
+  .legend{display:flex;gap:16px;font-size:12px;margin-top:8px;flex-wrap:wrap;}
+  .legend span{display:flex;align-items:center;gap:6px;}
+  .legend i{width:10px;height:10px;border-radius:2px;display:inline-block;}
+
+  .interest-controls{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px;align-items:center;}
+  .note-box{
+    background:rgba(184,134,43,.08); border:1px dashed var(--gold);
+    border-radius:8px; padding:10px 14px; font-size:12.5px; color:var(--ink-soft);
+    margin-bottom:14px;
+  }
+  input[type=file]{font-size:12.5px; max-width:100%;}
+
+  footer{
+    max-width:1100px;margin:50px auto 0;padding:20px;
+    color:var(--ink-soft);font-size:12px;border-top:1px solid var(--paper-line);
+  }
+  ::-webkit-scrollbar{height:8px;width:8px;}
+  ::-webkit-scrollbar-thumb{background:var(--paper-line);border-radius:10px;}
+
+  /* modal */
+  .modal-bg{
+    position:fixed; inset:0; background:rgba(43,33,24,.45); z-index:90;
+    display:flex; align-items:center; justify-content:center; padding:20px;
+  }
+  .modal{
+    background:var(--paper-card); border-radius:12px; padding:24px;
+    max-width:340px; width:100%; box-shadow:var(--shadow);
+  }
+  .modal h3{font-family:'Noto Serif Thai',serif; margin:0 0 14px;}
+  .modal .field{margin-bottom:12px;}
+  .modal-actions{display:flex; gap:10px; margin-top:14px;}
+  .modal-actions .btn{flex:1;}
+
+  @media (max-width:480px){
+    :root{font-size:15px;}
+    header.ledger-head{padding:22px 16px 16px;}
+    main{padding:0 14px;}
+    .cards{grid-template-columns:repeat(2,1fr);}
+    .strategy-stats{gap:12px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ PIN GATE ============ -->
+<div id="pinGate">
+  <div class="pin-box">
+    <span class="tag">DEBT LEDGER · SUPABASE SYNC</span>
+    <h1>ใส่รหัส PIN</h1>
+    <p>ข้อมูลหนี้สินส่วนตัว — ใส่รหัสผ่านเพื่อเข้าดู/แก้ไข</p>
+    <input id="pinInput" type="password" inputmode="numeric" pattern="[0-9]*" maxlength="10" placeholder="••••••" autofocus>
+    <div id="pinError"></div>
+    <button class="btn gold" id="pinSubmit">ปลดล็อก</button>
+    <div class="pin-setup-note">
+      ตั้งค่าครั้งแรก: รัน <span class="mono">schema.sql</span> ใน Supabase SQL Editor แล้วใส่ <b>Anon Key</b> ในไฟล์นี้ก่อนใช้งาน (ดูคอมเมนต์ในซอร์สโค้ด)
+    </div>
+  </div>
+</div>
+
+<!-- ============ MAIN APP ============ -->
+<header class="ledger-head">
+  <div class="topbar">
+    <span class="tag">DEBT LEDGER · สมุดบัญชีหนี้สิน</span>
+    <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
+      <div class="sync-status" id="syncStatus"><span class="dot"></span><span id="syncLabel">—</span></div>
+      <button class="icon-btn" id="changePinBtn">เปลี่ยน PIN</button>
+      <button class="icon-btn" id="lockBtn">ล็อกหน้าจอ</button>
+    </div>
+  </div>
+  <h1>บริหารหนี้สิน</h1>
+  <p class="sub">บันทึกยอดหนี้ จำลองแผนการโปะหนี้ (Avalanche / Snowball) และบันทึกดอกเบี้ยรายเดือน — ซิงก์ทุกอุปกรณ์ผ่าน Supabase</p>
+</header>
+
+<main>
+
+  <section>
+    <div class="section-title"><span class="no">01</span><h2>ภาพรวมหนี้สิน</h2></div>
+    <div class="cards" id="summaryCards"></div>
+  </section>
+
+  <section>
+    <div class="section-title">
+      <span class="no">02</span><h2>รายการหนี้สินทั้งหมด</h2>
+      <span class="hint">แก้ไขแล้วบันทึกอัตโนมัติ</span>
+    </div>
+    <div class="tbl-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th style="min-width:100px">บัญชี</th>
+            <th style="min-width:80px">ดอก %/ปี</th>
+            <th style="min-width:120px">ยอดหนี้คงเหลือ</th>
+            <th style="min-width:120px">วงเงินเต็ม</th>
+            <th style="min-width:110px">วงเงินคงเหลือ</th>
+            <th style="min-width:100px">จ่าย/เดือน</th>
+            <th style="min-width:70px">% ใช้วงเงิน</th>
+            <th></th>
+          </tr>
+        </thead>
+        <tbody id="debtRows"></tbody>
+      </table>
+    </div>
+    <div class="row-actions">
+      <button class="btn gold" id="addRowBtn">+ เพิ่มบัญชีหนี้</button>
+      <button class="btn ghost" id="exportJsonBtn">สำรองข้อมูล (.json)</button>
+      <label class="btn ghost" style="cursor:pointer;">
+        นำเข้าสำรอง (.json)
+        <input type="file" id="importJsonInput" accept="application/json" style="display:none;">
+      </label>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title"><span class="no">03</span><h2>จำลองแผนโปะหนี้</h2></div>
+    <div class="note-box">
+      กลไก: ทุกเดือนแต่ละบัญชีจะถูกคิดดอกเบี้ยจากยอดคงเหลือ แล้วนำเงินที่ผ่อนขั้นต่ำของทุกบัญชีจ่ายก่อน
+      ส่วนเงินโปะพิเศษ (ถ้ามี) และเงินที่ &laquo;ว่างลง&raquo; จากบัญชีที่ปิดแล้ว จะถูกทบไปโปะบัญชีเป้าหมายถัดไปตามลำดับกลยุทธ์
+    </div>
+    <div class="field-row">
+      <div class="field">
+        <label>เงินโปะพิเศษเพิ่ม/เดือน (บาท)</label>
+        <input type="number" id="extraPayment" value="0" min="0" step="100">
+      </div>
+      <div class="field">
+        <label>เป้าหมายจำนวนงวด (เดือน)</label>
+        <div class="chips" id="termChips">
+          <div class="chip" data-term="24">24 งวด</div>
+          <div class="chip" data-term="36">36 งวด</div>
+          <div class="chip" data-term="60">60 งวด</div>
+          <div class="chip active" data-term="0">ไม่กำหนด</div>
+        </div>
+      </div>
+      <div class="field">
+        <button class="btn gold" id="runSimBtn">คำนวณแผน</button>
+      </div>
+      <div class="field" id="targetResultField" style="display:none;">
+        <label>เงินโปะพิเศษที่ต้องใช้ เพื่อให้หมดภายในเป้าหมาย</label>
+        <div class="mono" id="targetResultValue" style="font-size:18px;font-weight:600;color:var(--red);"></div>
+      </div>
+    </div>
+
+    <div class="strategy-grid" id="strategyGrid"></div>
+
+    <div style="margin-top:22px;">
+      <div class="section-title" style="margin-bottom:6px;"><h2 style="font-size:16px;">กราฟยอดหนี้คงเหลือตามแผน</h2></div>
+      <svg class="chart" id="payoffChart" viewBox="0 0 1000 200" preserveAspectRatio="none"></svg>
+      <div class="legend">
+        <span><i style="background:var(--red-soft);"></i>Avalanche (ดอกเบี้ยสูงก่อน)</span>
+        <span><i style="background:var(--green-soft);"></i>Snowball (ยอดน้อยก่อน)</span>
+      </div>
+    </div>
+  </section>
+
+  <section>
+    <div class="section-title">
+      <span class="no">04</span><h2>บันทึกดอกเบี้ยที่ธนาคารเรียกเก็บจริงรายเดือน</h2>
+      <span class="hint">กรอกมือ หรือวางข้อมูล CSV</span>
+    </div>
+    <div class="note-box">
+      ใช้ตารางนี้บันทึกยอดดอกเบี้ยจริงที่แต่ละธนาคารเรียกเก็บในใบแจ้งหนี้ (statement) แต่ละเดือน เพื่อเทียบกับตัวเลขที่โปรแกรมจำลองไว้<br>
+      <b>นำเข้า CSV:</b> แถวแรกเป็นหัวคอลัมน์ = <span class="mono">เดือน,CIMB1,CIMB2,SCB1,...</span> (ชื่อคอลัมน์ต้องตรงกับชื่อบัญชีด้านบน)
+    </div>
+    <div class="interest-controls">
+      <button class="btn gold small" id="addMonthBtn">+ เพิ่มเดือน</button>
+      <label class="btn ghost small" style="cursor:pointer;">
+        นำเข้า CSV
+        <input type="file" id="importCsvInput" accept=".csv,text/csv" style="display:none;">
+      </label>
+      <button class="btn ghost small" id="exportCsvBtn">ส่งออก CSV</button>
+    </div>
+    <div class="tbl-wrap">
+      <table id="interestTable">
+        <thead><tr id="interestHead"></tr></thead>
+        <tbody id="interestBody"></tbody>
+      </table>
+    </div>
+  </section>
+
+</main>
+
+<footer>
+  ข้อมูลซิงก์อัตโนมัติผ่าน Supabase (RLS เปิดอยู่ — เข้าถึงข้อมูลได้เฉพาะผ่านฟังก์ชันที่ตรวจ PIN เท่านั้น) แนะนำให้กด "สำรองข้อมูล (.json)" เป็นระยะเพื่อเก็บสำเนาไว้เอง
+</footer>
+
+<div id="modalRoot"></div>
+
+<script>
+/* ============================================================
+   SUPABASE CONFIG
+   1) รัน schema.sql ใน Supabase SQL editor ของโปรเจกต์นี้ก่อน
+   2) ใส่ Anon/Public API Key ด้านล่าง (Project Settings > API)
+   ============================================================ */
+const SUPABASE_URL = 'https://uhefxwccuqagnbrbidbh.supabase.co';
+const SUPABASE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVoZWZ4d2NjdXFhZ25icmJpZGJoIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODYwMDI1NDYsImV4cCI6MjEwMTU3ODU0Nn0.EE5QWPVjSkZpUTU37hgiz4LsGMAfq87dxFOkt9OYynY';
+
+/* ---------------- STATE ---------------- */
+let debts = [];
+let interestLog = [];
+let selectedTerm = 0;
+let currentPin = null;
+let saveTimer = null;
+
+const DEFAULT_DEBTS = [
+  {name:"CIMB1",   rate:19.99, balance:104365.52, limit:140000.00, payment:3360},
+  {name:"CIMB2",   rate:16,    balance:50000.00,  limit:50000.00,  payment:4000},
+  {name:"SCB1",    rate:16,    balance:70000.00,  limit:70000.00,  payment:7200},
+  {name:"SCB2",    rate:16,    balance:86500.00,  limit:105000.00, payment:6150},
+  {name:"BAY1",    rate:25,    balance:86208.97,  limit:112000.00, payment:3288},
+  {name:"BAY2",    rate:16,    balance:82108.00,  limit:85000.00,  payment:12381},
+  {name:"UOB1(เล่มรถ)", rate:13.5, balance:262406.62, limit:361000.00, payment:7350},
+  {name:"UOB2",    rate:25,    balance:92957.00,  limit:102300.00, payment:4750},
+  {name:"สัจจะ",    rate:12,    balance:25000.00,  limit:50000.00,  payment:1500},
+];
+
+/* ---------------- SUPABASE RPC HELPER ---------------- */
+async function callRpc(fnName, params){
+  const res = await fetch(`${SUPABASE_URL}/rest/v1/rpc/${fnName}`, {
+    method:'POST',
+    headers:{
+      'Content-Type':'application/json',
+      'apikey': SUPABASE_ANON_KEY,
+      'Authorization': `Bearer ${SUPABASE_ANON_KEY}`
+    },
+    body: JSON.stringify(params)
+  });
+  if(!res.ok){
+    let msg = res.statusText;
+    try{ const err = await res.json(); msg = err.message || err.hint || msg; }catch(e){}
+    if(msg.includes('invalid_pin')) msg = 'รหัส PIN ไม่ถูกต้อง';
+    throw new Error(msg);
+  }
+  return res.json();
+}
+
+/* ---------------- SYNC STATUS UI ---------------- */
+function setSyncStatus(state, text){
+  const el = document.getElementById('syncStatus');
+  el.className = 'sync-status ' + state;
+  document.getElementById('syncLabel').textContent = text;
+}
+
+/* ---------------- PIN GATE ---------------- */
+async function tryUnlock(pin){
+  const errEl = document.getElementById('pinError');
+  errEl.textContent = '';
+  if(SUPABASE_ANON_KEY.startsWith('PASTE_')){
+    errEl.textContent = 'ยังไม่ได้ใส่ Supabase Anon Key ในโค้ด — ดูคำแนะนำด้านล่าง';
+    return;
+  }
+  document.getElementById('pinSubmit').disabled = true;
+  document.getElementById('pinSubmit').textContent = 'กำลังตรวจสอบ...';
+  try{
+    const data = await callRpc('get_debt_data', {input_pin: pin});
+    currentPin = pin;
+    debts = (data.debts && data.debts.length) ? data.debts : [];
+    interestLog = data.interest_log || [];
+    document.getElementById('pinGate').style.display = 'none';
+    setSyncStatus('ok','ซิงก์ล่าสุดแล้ว');
+    renderAll();
+  }catch(e){
+    errEl.textContent = e.message || 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง';
+  }finally{
+    document.getElementById('pinSubmit').disabled = false;
+    document.getElementById('pinSubmit').textContent = 'ปลดล็อก';
+  }
+}
+document.getElementById('pinSubmit').addEventListener('click', ()=>{
+  const pin = document.getElementById('pinInput').value.trim();
+  if(!pin){ document.getElementById('pinError').textContent = 'กรุณาใส่ PIN'; return; }
+  tryUnlock(pin);
+});
+document.getElementById('pinInput').addEventListener('keydown', e=>{
+  if(e.key === 'Enter') document.getElementById('pinSubmit').click();
+});
+document.getElementById('lockBtn').addEventListener('click', ()=>{
+  currentPin = null;
+  document.getElementById('pinInput').value = '';
+  document.getElementById('pinGate').style.display = 'flex';
+});
+
+/* ---------------- AUTO-SAVE ---------------- */
+function scheduleSave(){
+  if(!currentPin) return;
+  setSyncStatus('saving','กำลังบันทึก...');
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(async ()=>{
+    try{
+      await callRpc('save_debt_data', {input_pin: currentPin, new_debts: debts, new_interest_log: interestLog});
+      setSyncStatus('ok','บันทึกแล้ว ' + new Date().toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}));
+    }catch(e){
+      setSyncStatus('err','บันทึกไม่สำเร็จ: '+e.message);
+    }
+  }, 900);
+}
+
+/* ---------------- CHANGE PIN MODAL ---------------- */
+document.getElementById('changePinBtn').addEventListener('click', ()=>{
+  const root = document.getElementById('modalRoot');
+  root.innerHTML = `
+    <div class="modal-bg" id="pinModalBg">
+      <div class="modal">
+        <h3>เปลี่ยนรหัส PIN</h3>
+        <div class="field"><label>PIN เดิม</label><input type="password" id="oldPinInput" inputmode="numeric"></div>
+        <div class="field"><label>PIN ใหม่</label><input type="password" id="newPinInput" inputmode="numeric"></div>
+        <div id="pinModalErr" style="color:var(--red);font-size:12.5px;min-height:16px;"></div>
+        <div class="modal-actions">
+          <button class="btn ghost" id="cancelPinModal">ยกเลิก</button>
+          <button class="btn gold" id="confirmPinModal">บันทึก</button>
+        </div>
+      </div>
+    </div>`;
+  document.getElementById('cancelPinModal').addEventListener('click', ()=> root.innerHTML='');
+  document.getElementById('confirmPinModal').addEventListener('click', async ()=>{
+    const oldPin = document.getElementById('oldPinInput').value.trim();
+    const newPin = document.getElementById('newPinInput').value.trim();
+    const errEl = document.getElementById('pinModalErr');
+    if(!oldPin || !newPin){ errEl.textContent = 'กรอกให้ครบทั้งสองช่อง'; return; }
+    try{
+      await callRpc('change_debt_pin', {old_pin: oldPin, new_pin: newPin});
+      currentPin = newPin;
+      root.innerHTML = '';
+      setSyncStatus('ok','เปลี่ยน PIN สำเร็จ');
+    }catch(e){ errEl.textContent = e.message; }
+  });
+});
+
+/* ---------------- HELPERS ---------------- */
+const fmt0 = n => Math.round(isNaN(n)?0:n).toLocaleString('th-TH');
+function ratePill(rate){
+  let cls = rate>=20?'high':(rate>=15?'mid':'low');
+  return `<span class="pill ${cls}">${rate}%</span>`;
+}
+
+/* ---------------- RENDER: SUMMARY ---------------- */
+function renderSummary(){
+  const totalBalance = debts.reduce((s,d)=>s+Number(d.balance),0);
+  const totalLimit = debts.reduce((s,d)=>s+Number(d.limit),0);
+  const totalPayment = debts.reduce((s,d)=>s+Number(d.payment),0);
+  const weightedRate = totalBalance>0 ? debts.reduce((s,d)=>s+d.rate*d.balance,0)/totalBalance : 0;
+  const util = totalLimit>0 ? (totalBalance/totalLimit*100) : 0;
+  const monthlyInterestEstimate = debts.reduce((s,d)=>s+ (d.balance * (d.rate/100/12)), 0);
+
+  const cards = [
+    {label:'ยอดหนี้รวม', value:fmt0(totalBalance)+' ฿', sub: debts.length+' บัญชี', cls:'red'},
+    {label:'ผ่อนชำระรวม/เดือน', value:fmt0(totalPayment)+' ฿', sub:'ยอดที่ต้องจ่ายทุกเดือน', cls:''},
+    {label:'ดอกเบี้ยเฉลี่ยถ่วงน้ำหนัก', value:weightedRate.toFixed(2)+' %', sub:'ต่อปี', cls:''},
+    {label:'ดอกเบี้ยประเมิน/เดือน', value:fmt0(monthlyInterestEstimate)+' ฿', sub:'จากยอดคงเหลือปัจจุบัน', cls:'red'},
+    {label:'วงเงินที่ใช้ไป', value:util.toFixed(1)+' %', sub:fmt0(totalLimit)+' ฿ วงเงินรวม', cls: util>85?'red':'green'},
+  ];
+  document.getElementById('summaryCards').innerHTML = cards.map(c=>`
+    <div class="card">
+      <div class="label">${c.label}</div>
+      <div class="value ${c.cls} mono">${c.value}</div>
+      <div class="sub">${c.sub}</div>
+    </div>`).join('');
+}
+
+/* ---------------- RENDER: DEBT TABLE ---------------- */
+function renderDebtTable(){
+  const tbody = document.getElementById('debtRows');
+  tbody.innerHTML = debts.map((d,i)=>{
+    const util = d.limit>0 ? (d.balance/d.limit*100) : 0;
+    const utilCls = util>=95?'high':(util>=70?'mid':'low');
+    return `<tr data-i="${i}">
+      <td><input class="cell" data-field="name" data-name value="${d.name}"></td>
+      <td>${ratePill(d.rate)}<input class="cell" style="width:50px;display:inline-block;" data-field="rate" type="number" step="0.01" value="${d.rate}"></td>
+      <td><input class="cell" data-field="balance" type="number" step="0.01" value="${d.balance}"></td>
+      <td><input class="cell" data-field="limit" type="number" step="0.01" value="${d.limit}"></td>
+      <td class="mono">${fmt0(Math.max(d.limit-d.balance,0))} ฿</td>
+      <td><input class="cell" data-field="payment" type="number" step="1" value="${d.payment}"></td>
+      <td><span class="pill ${utilCls}">${util.toFixed(0)}%</span></td>
+      <td><button class="del-btn" title="ลบบัญชี">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  tbody.querySelectorAll('input.cell').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      const tr = e.target.closest('tr');
+      const i = Number(tr.dataset.i);
+      const field = e.target.dataset.field;
+      let val = e.target.value;
+      debts[i][field] = (field==='name') ? val : Number(val);
+      renderAll();
+      scheduleSave();
+    });
+  });
+  tbody.querySelectorAll('.del-btn').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const tr = e.target.closest('tr');
+      const i = Number(tr.dataset.i);
+      if(confirm(`ลบบัญชี "${debts[i].name}" ?`)){
+        debts.splice(i,1);
+        renderAll();
+        scheduleSave();
+      }
+    });
+  });
+}
+
+document.getElementById('addRowBtn').addEventListener('click', ()=>{
+  debts.push({name:'บัญชีใหม่', rate:15, balance:0, limit:0, payment:0});
+  renderAll();
+  scheduleSave();
+});
+
+/* ---------------- EXPORT / IMPORT JSON (local backup) ---------------- */
+document.getElementById('exportJsonBtn').addEventListener('click', ()=>{
+  const data = {debts, interestLog};
+  const blob = new Blob([JSON.stringify(data,null,2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = `debt-ledger-${new Date().toISOString().slice(0,10)}.json`;
+  a.click(); URL.revokeObjectURL(url);
+});
+document.getElementById('importJsonInput').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    try{
+      const data = JSON.parse(ev.target.result);
+      if(data.debts) debts = data.debts;
+      if(data.interestLog) interestLog = data.interestLog;
+      renderAll();
+      scheduleSave();
+      alert('นำเข้าข้อมูลสำเร็จ');
+    }catch(err){ alert('ไฟล์ไม่ถูกต้อง: '+err.message); }
+  };
+  reader.readAsText(file);
+  e.target.value='';
+});
+
+/* ---------------- SIMULATION ENGINE ---------------- */
+function simulate(strategy, extraMonthly, maxMonths=600){
+  let work = debts.map(d=>({name:d.name, rate:d.rate, balance:Number(d.balance), minPay:Number(d.payment)}))
+                   .filter(d=>d.balance>0);
+  if(work.length===0) return {history:[], months:0, totalInterest:0, order:[]};
+
+  const order = [...work].sort((a,b)=>{
+    if(strategy==='avalanche') return b.rate - a.rate;
+    return a.balance - b.balance;
+  }).map(d=>d.name);
+
+  let history = [{month:0, totalBalance: work.reduce((s,d)=>s+d.balance,0)}];
+  let totalInterest = 0;
+  let month = 0;
+
+  while(work.some(d=>d.balance>0.5) && month < maxMonths){
+    month++;
+    let monthInterest = 0;
+    work.forEach(d=>{
+      if(d.balance>0){
+        const int = d.balance * (d.rate/100/12);
+        d.balance += int;
+        monthInterest += int;
+      }
+    });
+    totalInterest += monthInterest;
+
+    let pool = extraMonthly;
+    work.forEach(d=>{
+      if(d.balance>0){
+        const pay = Math.min(d.minPay, d.balance);
+        d.balance -= pay;
+        pool += (d.minPay - pay);
+      } else {
+        pool += d.minPay;
+      }
+    });
+
+    for(const name of order){
+      if(pool<=0) break;
+      const d = work.find(x=>x.name===name);
+      if(d && d.balance>0){
+        const pay = Math.min(pool, d.balance);
+        d.balance -= pay;
+        pool -= pay;
+      }
+    }
+    history.push({month, totalBalance: Math.max(work.reduce((s,d)=>s+Math.max(d.balance,0),0),0)});
+  }
+
+  return {history, months:month, totalInterest, order, reachedCap: month>=maxMonths};
+}
+
+function findExtraForTerm(strategy, targetMonths){
+  let lo=0, hi=500000;
+  for(let iter=0; iter<40; iter++){
+    const mid = (lo+hi)/2;
+    const res = simulate(strategy, mid, targetMonths+2);
+    if(res.months <= targetMonths && !res.reachedCap) hi = mid; else lo = mid;
+  }
+  return hi;
+}
+
+/* ---------------- RENDER: STRATEGY + CHART ---------------- */
+function renderSimResults(){
+  const extra = Number(document.getElementById('extraPayment').value)||0;
+  const avalanche = simulate('avalanche', extra);
+  const snowball  = simulate('snowball', extra);
+
+  const grid = document.getElementById('strategyGrid');
+  function block(title, badge, res){
+    const yrs = (res.months/12).toFixed(1);
+    return `<div class="strategy-card">
+      <span class="badge">${badge}</span>
+      <h3>${title}</h3>
+      <div class="strategy-stats">
+        <div><div class="num mono">${res.reachedCap?'50ปี+':res.months+' เดือน'}</div><div class="cap">ระยะเวลาปลดหนี้ (~${yrs} ปี)</div></div>
+        <div><div class="num mono" style="color:var(--red);">${fmt0(res.totalInterest)} ฿</div><div class="cap">ดอกเบี้ยรวมที่จ่าย</div></div>
+      </div>
+      <div style="font-size:12px;color:var(--ink-soft);margin-top:10px;">ลำดับโปะหนี้:</div>
+      <ol class="order-list">
+        ${res.order.map((n,idx)=>`<li><span class="n">${idx+1}. ${n}</span><span>${debts.find(d=>d.name===n)?debts.find(d=>d.name===n).rate:''}%</span></li>`).join('')}
+      </ol>
+    </div>`;
+  }
+  grid.innerHTML = block('Avalanche', 'ดอกเบี้ยสูงสุดก่อน — ประหยัดดอกเบี้ยสุด', avalanche)
+                  + block('Snowball', 'ยอดหนี้น้อยสุดก่อน — ปิดบัญชีได้ไวสุด', snowball);
+
+  drawChart(avalanche.history, snowball.history);
+
+  const targetField = document.getElementById('targetResultField');
+  if(selectedTerm>0){
+    const neededAval = findExtraForTerm('avalanche', selectedTerm);
+    const neededSnow = findExtraForTerm('snowball', selectedTerm);
+    targetField.style.display='';
+    document.getElementById('targetResultValue').innerHTML =
+      `Avalanche: +${fmt0(neededAval)} ฿/ด<br>Snowball: +${fmt0(neededSnow)} ฿/ด`;
+  } else {
+    targetField.style.display='none';
+  }
+}
+
+function drawChart(histA, histB){
+  const svg = document.getElementById('payoffChart');
+  const W=1000, H=200, padL=50, padB=24, padT=10;
+  const maxMonth = Math.max(histA[histA.length-1]?.month||0, histB[histB.length-1]?.month||0, 1);
+  const maxBal = Math.max(histA[0]?.totalBalance||0, histB[0]?.totalBalance||0, 1);
+
+  const x = m => padL + (m/maxMonth) * (W-padL-10);
+  const y = b => padT + (1 - b/maxBal) * (H-padT-padB);
+
+  function pathFor(hist){
+    return hist.map((p,idx)=> `${idx===0?'M':'L'} ${x(p.month).toFixed(1)} ${y(p.totalBalance).toFixed(1)}`).join(' ');
+  }
+
+  let grid = '';
+  for(let i=0;i<=4;i++){
+    const val = maxBal * (1 - i/4);
+    const yy = y(val);
+    grid += `<line x1="${padL}" y1="${yy}" x2="${W-10}" y2="${yy}" stroke="#D9CBA8" stroke-width="1"/>`;
+    grid += `<text x="${padL-8}" y="${yy+4}" text-anchor="end" font-size="11" font-family="IBM Plex Mono" fill="#5B5142">${(val/1000).toFixed(0)}k</text>`;
+  }
+  let xlabels='';
+  const step = Math.max(Math.round(maxMonth/6/6)*6, 6);
+  for(let m=0; m<=maxMonth; m+=step){
+    xlabels += `<text x="${x(m)}" y="${H-6}" text-anchor="middle" font-size="11" font-family="IBM Plex Mono" fill="#5B5142">${m}ด</text>`;
+  }
+
+  svg.innerHTML = `
+    ${grid}
+    ${xlabels}
+    <path d="${pathFor(histA)}" fill="none" stroke="#C1584F" stroke-width="2.5"/>
+    <path d="${pathFor(histB)}" fill="none" stroke="#6E9B7C" stroke-width="2.5" stroke-dasharray="5,3"/>
+    <line x1="${padL}" y1="${padT}" x2="${padL}" y2="${H-padB}" stroke="#2B2118" stroke-width="1.2"/>
+    <line x1="${padL}" y1="${H-padB}" x2="${W-10}" y2="${H-padB}" stroke="#2B2118" stroke-width="1.2"/>
+  `;
+}
+
+document.getElementById('termChips').addEventListener('click', e=>{
+  const chip = e.target.closest('.chip'); if(!chip) return;
+  document.querySelectorAll('#termChips .chip').forEach(c=>c.classList.remove('active'));
+  chip.classList.add('active');
+  selectedTerm = Number(chip.dataset.term);
+  renderSimResults();
+});
+document.getElementById('runSimBtn').addEventListener('click', renderSimResults);
+document.getElementById('extraPayment').addEventListener('change', renderSimResults);
+
+/* ---------------- INTEREST LOG ---------------- */
+function renderInterestTable(){
+  const head = document.getElementById('interestHead');
+  head.innerHTML = `<th style="min-width:100px">เดือน</th>` +
+    debts.map(d=>`<th class="mono" style="min-width:95px">${d.name}</th>`).join('') +
+    `<th style="min-width:90px">รวม</th><th></th>`;
+
+  const body = document.getElementById('interestBody');
+  body.innerHTML = interestLog.map((row,ri)=>{
+    const total = debts.reduce((s,d)=> s + (Number(row.values[d.name])||0), 0);
+    return `<tr data-ri="${ri}">
+      <td><input class="cell" data-field="month" value="${row.month||''}" placeholder="2569-08"></td>
+      ${debts.map(d=>`<td><input class="cell" data-acc="${d.name}" type="number" step="0.01" value="${row.values[d.name] ?? ''}"></td>`).join('')}
+      <td class="mono">${fmt0(total)} ฿</td>
+      <td><button class="del-btn" title="ลบแถว">✕</button></td>
+    </tr>`;
+  }).join('');
+
+  body.querySelectorAll('input[data-field="month"]').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      const ri = Number(e.target.closest('tr').dataset.ri);
+      interestLog[ri].month = e.target.value;
+      scheduleSave();
+    });
+  });
+  body.querySelectorAll('input[data-acc]').forEach(inp=>{
+    inp.addEventListener('change', e=>{
+      const ri = Number(e.target.closest('tr').dataset.ri);
+      interestLog[ri].values[e.target.dataset.acc] = Number(e.target.value)||0;
+      renderInterestTable();
+      scheduleSave();
+    });
+  });
+  body.querySelectorAll('.del-btn').forEach(btn=>{
+    btn.addEventListener('click', e=>{
+      const ri = Number(e.target.closest('tr').dataset.ri);
+      interestLog.splice(ri,1);
+      renderInterestTable();
+      scheduleSave();
+    });
+  });
+}
+
+document.getElementById('addMonthBtn').addEventListener('click', ()=>{
+  interestLog.push({month:'', values:{}});
+  renderInterestTable();
+  scheduleSave();
+});
+
+document.getElementById('exportCsvBtn').addEventListener('click', ()=>{
+  const cols = ['เดือน', ...debts.map(d=>d.name)];
+  const lines = [cols.join(',')];
+  interestLog.forEach(row=>{
+    const vals = debts.map(d=> row.values[d.name] ?? '');
+    lines.push([row.month, ...vals].join(','));
+  });
+  const blob = new Blob([lines.join('\n')], {type:'text/csv;charset=utf-8;'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href=url; a.download='interest-log.csv'; a.click(); URL.revokeObjectURL(url);
+});
+
+document.getElementById('importCsvInput').addEventListener('change', e=>{
+  const file = e.target.files[0]; if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ev=>{
+    const text = ev.target.result;
+    const lines = text.split(/\r?\n/).filter(l=>l.trim().length>0);
+    if(lines.length<2){ alert('ไม่พบข้อมูลใน CSV'); return; }
+    const header = lines[0].split(',').map(h=>h.trim());
+    const accCols = header.slice(1);
+    const newRows = lines.slice(1).map(line=>{
+      const cells = line.split(',');
+      const values = {};
+      accCols.forEach((acc,idx)=>{
+        const v = Number(cells[idx+1]);
+        if(!isNaN(v) && cells[idx+1]!=='') values[acc]=v;
+      });
+      return {month: cells[0]?.trim()||'', values};
+    });
+    interestLog = interestLog.concat(newRows);
+    renderInterestTable();
+    scheduleSave();
+    alert(`นำเข้า ${newRows.length} แถวสำเร็จ`);
+  };
+  reader.readAsText(file);
+  e.target.value='';
+});
+
+/* ---------------- INIT ---------------- */
+function renderAll(){
+  renderSummary();
+  renderDebtTable();
+  renderSimResults();
+  renderInterestTable();
+}
+// หน้าจอจะว่างจนกว่าจะใส่ PIN ถูกต้อง (ดึงข้อมูลจาก Supabase ผ่าน tryUnlock)
+</script>
+</body>
+</html>
