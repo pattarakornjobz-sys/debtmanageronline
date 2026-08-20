@@ -405,13 +405,16 @@
         <input type="number" id="extraPayment" value="0" min="0" step="100">
       </div>
       <div class="field">
-        <label>เป้าหมายจำนวนงวด (เดือน)</label>
+        <label>เป้าหมายจำนวนงวด (เดือน) — เลือกด่วนหรือพิมพ์เองก็ได้</label>
         <div class="chips" id="termChips">
-          <div class="chip" data-term="24">24 งวด</div>
-          <div class="chip" data-term="36">36 งวด</div>
-          <div class="chip" data-term="60">60 งวด</div>
           <div class="chip active" data-term="0">ไม่กำหนด</div>
+          <div class="chip" data-term="12">12</div>
+          <div class="chip" data-term="24">24</div>
+          <div class="chip" data-term="36">36</div>
+          <div class="chip" data-term="48">48</div>
+          <div class="chip" data-term="60">60</div>
         </div>
+        <input type="number" id="customTermInput" placeholder="พิมพ์จำนวนงวดเอง เช่น 18, 30, 90..." min="1" step="1" style="margin-top:8px;">
       </div>
       <div class="field">
         <button class="btn gold" id="runSimBtn">คำนวณแผน</button>
@@ -855,7 +858,20 @@ document.getElementById('termChips').addEventListener('click', e=>{
   document.querySelectorAll('#termChips .chip').forEach(c=>c.classList.remove('active'));
   chip.classList.add('active');
   selectedTerm = Number(chip.dataset.term);
+  document.getElementById('customTermInput').value = '';
   renderSimResults();
+});
+document.getElementById('customTermInput').addEventListener('input', e=>{
+  const val = Number(e.target.value);
+  document.querySelectorAll('#termChips .chip').forEach(c=>c.classList.remove('active'));
+  if(val > 0){
+    selectedTerm = val;
+    renderSimResults();
+  } else if(e.target.value === ''){
+    selectedTerm = 0;
+    document.querySelector('#termChips .chip[data-term="0"]').classList.add('active');
+    renderSimResults();
+  }
 });
 document.getElementById('runSimBtn').addEventListener('click', renderSimResults);
 document.getElementById('extraPayment').addEventListener('change', renderSimResults);
