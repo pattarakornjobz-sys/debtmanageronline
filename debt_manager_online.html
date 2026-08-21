@@ -220,6 +220,18 @@
     margin-top:10px; padding-top:10px; border-top:1px dashed var(--paper-line);
     font-size:12px; color:var(--ink-soft);
   }
+  .term-block{
+    grid-column:1/-1; padding-top:10px; margin-top:2px; border-top:1px dashed var(--paper-line);
+  }
+  .term-progress-row{display:flex; align-items:center; gap:10px; margin-top:8px; flex-wrap:wrap;}
+  .term-progress-bar{
+    flex:1; min-width:100px; height:8px; border-radius:6px; background:var(--paper-line);
+    overflow:hidden; position:relative;
+  }
+  .term-progress-fill{height:100%; background:var(--gold); border-radius:6px;}
+  .term-progress-label{font-family:'IBM Plex Mono',monospace; font-size:12.5px; font-weight:600; color:var(--ink); white-space:nowrap;}
+  .term-interest-row{display:flex; gap:16px; flex-wrap:wrap; margin-top:8px; font-size:12px;}
+  .term-interest-row b{font-family:'IBM Plex Mono',monospace; color:var(--red); font-size:13.5px;}
 
   table{border-collapse:collapse;width:100%;min-width:780px;}
   thead th{
@@ -512,18 +524,18 @@ let currentPin = null;
 let saveTimer = null;
 
 const DEFAULT_DEBTS = [
-  {name:"CIMB1",   type:"installment", rate:19.99, balance:104365.52, limit:140000.00, payment:3360},
+  {name:"CIMB1",   type:"installment", rate:19.99, balance:104365.52, limit:140000.00, payment:3360,  totalTerms:0, paidTerms:0},
   {name:"CIMB2",   type:"revolving",   rate:16,    balance:50000.00,  limit:50000.00,  payment:4000,  minPercent:8.00,  minFloor:0,    minBasis:"blended"},
   {name:"SCB1",    type:"revolving",   rate:16,    balance:70000.00,  limit:70000.00,  payment:7200,  minPercent:10.00, minFloor:0,    minBasis:"principal_plus_interest"},
   {name:"SCB2",    type:"revolving",   rate:16,    balance:86500.00,  limit:105000.00, payment:6150,  minPercent:7.11,  minFloor:0,    minBasis:"blended"},
-  {name:"BAY1",    type:"installment", rate:25,    balance:86208.97,  limit:112000.00, payment:3288},
+  {name:"BAY1",    type:"installment", rate:25,    balance:86208.97,  limit:112000.00, payment:3288,  totalTerms:0, paidTerms:0},
   {name:"BAY2",    type:"revolving",   rate:16,    balance:82108.00,  limit:85000.00,  payment:12381, minPercent:15.08, minFloor:0,    minBasis:"blended"},
-  {name:"UOB1(เล่มรถ)", type:"installment", rate:13.5, balance:262406.62, limit:361000.00, payment:7350},
+  {name:"UOB1(เล่มรถ)", type:"installment", rate:13.5, balance:262406.62, limit:361000.00, payment:7350, totalTerms:0, paidTerms:0},
   {name:"UOB2",    type:"revolving",   rate:25,    balance:92957.00,  limit:102300.00, payment:4750,  minPercent:5.11,  minFloor:0,    minBasis:"blended"},
   {name:"สัจจะ",    type:"revolving",   rate:12,    balance:25000.00,  limit:50000.00,  payment:1250,  minPercent:0,     minFloor:1000, minBasis:"principal_plus_interest"},
 ];
 
-// เติมฟิลด์ที่ขาดให้ข้อมูลเก่า (กรณีเคยบันทึกไว้ก่อนอัปเดตฟีเจอร์ประเภทหนี้/ฐานคำนวณขั้นต่ำ)
+// เติมฟิลด์ที่ขาดให้ข้อมูลเก่า (กรณีเคยบันทึกไว้ก่อนอัปเดตฟีเจอร์ประเภทหนี้/ฐานคำนวณขั้นต่ำ/งวดผ่อน)
 function migrateDebt(d){
   let out = {...d};
   if(!out.type){
@@ -537,6 +549,8 @@ function migrateDebt(d){
   }
   if(out.minFloor === undefined) out.minFloor = 0;
   if(!out.minBasis) out.minBasis = 'blended';
+  if(out.totalTerms === undefined) out.totalTerms = 0;
+  if(out.paidTerms === undefined) out.paidTerms = 0;
   return out;
 }
 
@@ -728,6 +742,13 @@ function renderDebtTable(){
         estMin = Math.min(Math.max((d.balance+monthlyInt)*(minPercent/100), minFloor), d.balance+monthlyInt);
       }
     }
+    const totalTerms = Number(d.totalTerms ?? 0);
+    const paidTerms = Number(d.paidTerms ?? 0);
+    const remainingTerms = Math.max(totalTerms - paidTerms, 0);
+    const hasTermInfo = type==='installment' && totalTerms > 0;
+    const remainingInterest = hasTermInfo ? (d.payment*remainingTerms - d.balance) : null;
+    const totalContractInterest = (hasTermInfo && d.limit>0) ? (d.payment*totalTerms - d.limit) : null;
+    const progressPct = totalTerms>0 ? Math.min(paidTerms/totalTerms*100,100) : 0;
     return `<div class="debt-card" data-i="${i}">
       <div class="debt-card-head">
         <input class="dc-name" data-field="name" value="${d.name}">
@@ -741,7 +762,7 @@ function renderDebtTable(){
       <div class="debt-card-grid">
         <div class="dc-field"><label>ดอกเบี้ย %/ปี</label><input data-field="rate" type="number" step="0.01" value="${d.rate}"></div>
         <div class="dc-field"><label>ยอดหนี้คงเหลือ</label><input data-field="balance" type="number" step="0.01" value="${d.balance}"></div>
-        <div class="dc-field"><label>วงเงินเต็ม</label><input data-field="limit" type="number" step="0.01" value="${d.limit}"></div>
+        <div class="dc-field"><label>วงเงินเต็ม (ยอดกู้เดิม)</label><input data-field="limit" type="number" step="0.01" value="${d.limit}"></div>
         <div class="dc-field"><label>${type==='installment' ? 'ผ่อนคงที่/เดือน' : 'จ่ายปัจจุบัน/เดือน'}</label><input data-field="payment" type="number" step="1" value="${d.payment}"></div>
         ${type==='revolving' ? `
         <div class="dc-field" style="grid-column:1/-1;">
@@ -754,11 +775,30 @@ function renderDebtTable(){
         <div class="dc-field"><label>${minBasis==='principal_plus_interest' ? 'ขั้นต่ำต้น % ของยอด' : 'ขั้นต่ำ % ของยอด'}</label><input data-field="minPercent" type="number" step="0.1" value="${minPercent}"></div>
         <div class="dc-field"><label>${minBasis==='principal_plus_interest' ? 'ขั้นต่ำต้น (บาท) ถ้ามี' : 'ขั้นต่ำ (บาท) ถ้ามี'}</label><input data-field="minFloor" type="number" step="1" value="${minFloor}"></div>
         ` : ''}
+        ${type==='installment' ? `
+        <div class="dc-field"><label>จำนวนงวดทั้งหมด</label><input data-field="totalTerms" type="number" step="1" min="0" value="${totalTerms}" placeholder="เช่น 48"></div>
+        <div class="dc-field"><label>ผ่อนไปแล้ว (งวด)</label><input data-field="paidTerms" type="number" step="1" min="0" value="${paidTerms}" placeholder="เช่น 20"></div>
+        ` : ''}
       </div>
+      ${hasTermInfo ? `
+      <div class="term-block">
+        <div class="term-progress-row">
+          <span class="term-progress-label">งวดที่ ${paidTerms}/${totalTerms}</span>
+          <div class="term-progress-bar"><div class="term-progress-fill" style="width:${progressPct}%;"></div></div>
+          <span class="term-progress-label" style="color:var(--ink-soft);">เหลือ ${remainingTerms} งวด</span>
+        </div>
+        <div class="term-interest-row">
+          ${remainingInterest !== null && remainingInterest < 0
+            ? `<span style="color:var(--red);">⚠ ตัวเลขไม่สอดคล้องกัน — งวดที่เหลือคูณยอดผ่อนแล้วน้อยกว่ายอดหนี้คงเหลือ ลองเช็คจำนวนงวด/ยอดผ่อนอีกครั้ง</span>`
+            : `<span>ดอกเบี้ยที่ต้องจ่ายอีก (จากงวดที่เหลือ): <b>${fmt0(remainingInterest)} ฿</b></span>`}
+          ${totalContractInterest!==null ? `<span>ดอกเบี้ยรวมทั้งสัญญา: <b>${fmt0(totalContractInterest)} ฿</b></span>` : ''}
+        </div>
+      </div>
+      ` : ''}
       <div class="debt-card-footer">
         <span>วงเงินคงเหลือ: <b class="mono">${fmt0(availLimit)} ฿</b></span>
         <span class="pill ${utilCls}">ใช้วงเงิน ${util.toFixed(0)}%</span>
-        ${type==='revolving' ? `<span>ขั้นต่ำเดือนนี้ ≈ <b class="mono">${fmt0(estMin)} ฿</b></span>` : `<span>ผ่อนคงที่จนหมด</span>`}
+        ${type==='revolving' ? `<span>ขั้นต่ำเดือนนี้ ≈ <b class="mono">${fmt0(estMin)} ฿</b></span>` : `<span>${hasTermInfo ? 'ผ่อนคงที่ตามงวดที่กำหนด' : 'ผ่อนคงที่จนหมด (ยังไม่ระบุจำนวนงวด)'}</span>`}
       </div>
     </div>`;
   }).join('');
@@ -788,7 +828,7 @@ function renderDebtTable(){
 }
 
 document.getElementById('addRowBtn').addEventListener('click', ()=>{
-  debts.push({name:'บัญชีใหม่', type:'installment', rate:15, balance:0, limit:0, payment:0, minPercent:5, minFloor:0, minBasis:'blended'});
+  debts.push({name:'บัญชีใหม่', type:'installment', rate:15, balance:0, limit:0, payment:0, minPercent:5, minFloor:0, minBasis:'blended', totalTerms:0, paidTerms:0});
   renderAll();
   scheduleSave();
 });
