@@ -564,18 +564,23 @@ function setSyncStatus(state, text){
 }
 
 /* ---------------- PIN GATE ---------------- */
-async function tryUnlock(pin){
+const PIN_STORAGE_KEY = 'debt_ledger_remembered_pin';
+
+async function tryUnlock(pin, opts={}){
   const errEl = document.getElementById('pinError');
   errEl.textContent = '';
   if(SUPABASE_ANON_KEY.startsWith('PASTE_')){
     errEl.textContent = 'ยังไม่ได้ใส่ Supabase Anon Key ในโค้ด — ดูคำแนะนำด้านล่าง';
     return;
   }
-  document.getElementById('pinSubmit').disabled = true;
-  document.getElementById('pinSubmit').textContent = 'กำลังตรวจสอบ...';
+  if(!opts.silent){
+    document.getElementById('pinSubmit').disabled = true;
+    document.getElementById('pinSubmit').textContent = 'กำลังตรวจสอบ...';
+  }
   try{
     const data = await callRpc('get_debt_data', {input_pin: pin});
     currentPin = pin;
+    try{ localStorage.setItem(PIN_STORAGE_KEY, pin); }catch(e){}
     const loaded = data.debts && data.debts.length ? data.debts.map(migrateDebt) : null;
     debts = loaded || DEFAULT_DEBTS.map(d=>({...d}));
     interestLog = data.interest_log || [];
@@ -584,7 +589,9 @@ async function tryUnlock(pin){
     renderAll();
     if(!loaded) scheduleSave(); // ครั้งแรก: บันทึกข้อมูลตัวอย่าง/migrate กลับขึ้น Supabase ทันที
   }catch(e){
-    errEl.textContent = e.message || 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง';
+    // ถ้าเป็นการลองอัตโนมัติจาก PIN ที่จำไว้แล้วผิด (เช่น เปลี่ยน PIN จากเครื่องอื่น) ให้เงียบๆ แล้วโชว์หน้ากรอก PIN ตามปกติ
+    try{ localStorage.removeItem(PIN_STORAGE_KEY); }catch(err){}
+    if(!opts.silent) errEl.textContent = e.message || 'เกิดข้อผิดพลาด ลองใหม่อีกครั้ง';
   }finally{
     document.getElementById('pinSubmit').disabled = false;
     document.getElementById('pinSubmit').textContent = 'ปลดล็อก';
@@ -600,9 +607,24 @@ document.getElementById('pinInput').addEventListener('keydown', e=>{
 });
 document.getElementById('lockBtn').addEventListener('click', ()=>{
   currentPin = null;
+  try{ localStorage.removeItem(PIN_STORAGE_KEY); }catch(e){}
   document.getElementById('pinInput').value = '';
   document.getElementById('pinGate').style.display = 'flex';
 });
+
+// เข้าเว็บ/รีเฟรช: ถ้าเครื่องนี้เคยปลดล็อกสำเร็จมาก่อน จะลองปลดล็อกให้อัตโนมัติแบบเงียบๆ
+(function autoUnlockFromMemory(){
+  let remembered = null;
+  try{ remembered = localStorage.getItem(PIN_STORAGE_KEY); }catch(e){}
+  if(remembered){
+    document.getElementById('pinInput').value = remembered;
+    document.getElementById('pinError').textContent = 'กำลังเข้าสู่ระบบอัตโนมัติ...';
+    tryUnlock(remembered, {silent:true}).then(()=>{
+      const errEl = document.getElementById('pinError');
+      if(errEl.textContent === 'กำลังเข้าสู่ระบบอัตโนมัติ...') errEl.textContent = '';
+    });
+  }
+})();
 
 /* ---------------- AUTO-SAVE ---------------- */
 function scheduleSave(){
@@ -644,6 +666,7 @@ document.getElementById('changePinBtn').addEventListener('click', ()=>{
     try{
       await callRpc('change_debt_pin', {old_pin: oldPin, new_pin: newPin});
       currentPin = newPin;
+      try{ localStorage.setItem(PIN_STORAGE_KEY, newPin); }catch(e){}
       root.innerHTML = '';
       setSyncStatus('ok','เปลี่ยน PIN สำเร็จ');
     }catch(e){ errEl.textContent = e.message; }
